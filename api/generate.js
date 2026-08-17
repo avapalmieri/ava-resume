@@ -1,3 +1,5 @@
+import { checkRateLimit, getClientIp } from './_lib/rateLimit.js';
+
 const BACKGROUND = 'Background: B.S. Computer Information Systems College of Charleston 2026 Graduate focus AI and ML. AI Intern at Querri building RAG systems with OpenAI and Qdrant. ClearLand geospatial AI project. Closet Companion computer vision app. Skills: Python JavaScript TensorFlow PyTorch OpenCV MongoDB Qdrant REST APIs Agile.';
 
 // A hand-written fallback used whenever the Claude API call can't complete
@@ -16,6 +18,20 @@ export default async function handler(req, res) {
   }
 
   const { company } = req.body || {};
+
+  // Rate limit before touching the Anthropic API: protects your API budget
+  // from abuse or a traffic spike (a LinkedIn post going wider than
+  // expected, say). A limited visitor still gets a real letter, just the
+  // fallback one, so the experience never breaks or shows an error.
+  const ip = getClientIp(req);
+  const [perIp, global] = await Promise.all([
+    checkRateLimit(`ratelimit:generate:ip:${ip}`, 8, 3600),   // 8 requests per IP per hour
+    checkRateLimit('ratelimit:generate:global', 150, 86400)   // 150 requests total per day
+  ]);
+  if (perIp.limited || global.limited) {
+    console.warn('generate.js rate limited', { ip, perIpCount: perIp.count, globalCount: global.count });
+    return res.status(200).json({ letter: fallbackLetter(company), source: 'fallback' });
+  }
 
   if (!process.env.ANTHROPIC_API_KEY) {
     console.warn('ANTHROPIC_API_KEY is not set — serving fallback cover letter.');
