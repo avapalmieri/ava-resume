@@ -73,10 +73,17 @@ async function loadLog() {
       tbody.innerHTML = '';
       entries.forEach(e => {
         const tr = document.createElement('tr');
-        tr.innerHTML = '<td>' + new Date(e.timestamp).toLocaleString() + '</td>' +
-          '<td>' + (e.email || '—') + '</td>' +
-          '<td>' + (e.company || '—') + '</td>' +
-          '<td>' + (e.domain || '—') + '</td>';
+        const cells = [
+          new Date(e.timestamp).toLocaleString(),
+          e.email || '—',
+          e.company || '—',
+          e.domain || '—'
+        ];
+        cells.forEach(text => {
+          const td = document.createElement('td');
+          td.textContent = text; // never innerHTML -- visitor-submitted text must not be parsed as markup
+          tr.appendChild(td);
+        });
         tbody.appendChild(tr);
       });
       document.getElementById('log-table').style.display = 'table';
