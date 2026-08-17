@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Visitor Log</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #f4f0e6; color: #3d2b1f; font-family: 'Instrument Sans', system-ui, sans-serif; padding: 3rem 2rem; }
+  h1 { font-size: 1.5rem; margin-bottom: 1.5rem; }
+  #gate { max-width: 360px; }
+  #gate input { width: 100%; padding: 12px 14px; border: 1px solid #d4c9b5; margin-bottom: 12px; font-size: 14px; }
+  #gate button { padding: 12px 20px; background: #c4613a; color: #faf8f3; border: none; cursor: pointer; font-size: 13px; letter-spacing: 1px; text-transform: uppercase; }
+  #gate button:hover { background: #b0542f; }
+  #error { color: #c4613a; font-size: 13px; margin-top: 8px; }
+  table { width: 100%; border-collapse: collapse; margin-top: 1rem; font-size: 13px; }
+  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid #e8e1d4; }
+  th { text-transform: uppercase; font-size: 10px; letter-spacing: 1px; color: #8a7f74; }
+  #note { color: #8a7f74; font-size: 13px; margin-top: 1rem; }
+  #refresh { margin-top: 1.5rem; padding: 8px 16px; background: transparent; border: 1px solid #d4c9b5; cursor: pointer; font-size: 12px; }
+</style>
+</head>
+<body>
+
+<div id="gate">
+  <h1>Visitor Log</h1>
+  <input type="password" id="key-input" placeholder="Access key" />
+  <button onclick="loadLog()">View</button>
+  <div id="error"></div>
+</div>
+
+<div id="results" style="display:none;">
+  <h1>Visitor Log</h1>
+  <div id="note"></div>
+  <table id="log-table" style="display:none;">
+    <thead>
+      <tr><th>Time</th><th>Email</th><th>Company</th><th>Domain</th></tr>
+    </thead>
+    <tbody id="log-body"></tbody>
+  </table>
+  <button id="refresh" onclick="loadLog()">Refresh</button>
+</div>
+
+<script>
+// sessionStorage is fine here -- this is a real deployed page for Ava's own
+// private use, not a Claude-rendered artifact.
+async function loadLog() {
+  const keyInput = document.getElementById('key-input');
+  const key = keyInput ? keyInput.value.trim() : sessionStorage.getItem('logKey');
+  if (!key) return;
+
+  document.getElementById('error').textContent = '';
+
+  try {
+    const res = await fetch('/api/views?key=' + encodeURIComponent(key));
+    if (res.status === 401) {
+      document.getElementById('error').textContent = 'Wrong key.';
+      return;
+    }
+    const data = await res.json();
+    sessionStorage.setItem('logKey', key);
+    document.getElementById('gate').style.display = 'none';
+    document.getElementById('results').style.display = 'block';
+
+    const entries = data.entries || [];
+    if (data.note) {
+      document.getElementById('note').textContent = data.note;
+    } else if (entries.length === 0) {
+      document.getElementById('note').textContent = 'No views logged yet.';
+    } else {
+      document.getElementById('note').textContent = entries.length + ' view(s) logged.';
+      const tbody = document.getElementById('log-body');
+      tbody.innerHTML = '';
+      entries.forEach(e => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = '<td>' + new Date(e.timestamp).toLocaleString() + '</td>' +
+          '<td>' + (e.email || '—') + '</td>' +
+          '<td>' + (e.company || '—') + '</td>' +
+          '<td>' + (e.domain || '—') + '</td>';
+        tbody.appendChild(tr);
+      });
+      document.getElementById('log-table').style.display = 'table';
+    }
+  } catch (err) {
+    document.getElementById('error').textContent = 'Something went wrong loading the log.';
+  }
+}
+
+// Auto-load if we already have a key from this session.
+const savedKey = sessionStorage.getItem('logKey');
+if (savedKey) {
+  document.getElementById('key-input').value = savedKey;
+  loadLog();
+}
+</script>
+</body>
+</html>
