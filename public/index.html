@@ -137,9 +137,9 @@ footer { border-top: 1px solid var(--sand); padding: 2rem 4rem; display: flex; j
   <div id="modal-box">
     <div class="modal-eyebrow">Hello there</div>
     <div class="modal-headline">Who's<br><em>reading?</em></div>
-    <p class="modal-body">Share your work email and I'll write a cover letter tailored specifically to your company. Or just browse the resume as-is.</p>
-    <input type="email" id="email-input" class="modal-input" placeholder="you@company.com" />
-    <button class="modal-btn" id="submit-btn" onclick="handleEmail()">Generate My Cover Letter</button>
+    <p class="modal-body">Share your work email or just your company name and I'll write a cover letter tailored specifically to your company. Or just browse the resume as-is.</p>
+    <input type="text" id="email-input" class="modal-input" placeholder="you@company.com or your company name" />
+    <button class="modal-btn" id="submit-btn" onclick="handleSubmit()">Generate My Cover Letter</button>
     <span class="modal-skip" onclick="showGeneric()">No thanks, just the resume</span>
   </div>
 </div>
@@ -296,9 +296,18 @@ function showGeneric() {
   document.getElementById('resume').style.display = 'block';
 }
 
-async function handleEmail() {
-  const email = document.getElementById('email-input').value.trim();
-  if (!email || !email.includes('@')) {
+function logView(payload) {
+  // Fire-and-forget: logging must never affect the visitor's experience.
+  fetch('/api/log', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  }).catch(() => {});
+}
+
+async function handleSubmit() {
+  const raw = document.getElementById('email-input').value.trim();
+  if (!raw) {
     document.getElementById('email-input').style.borderColor = '#c4613a';
     return;
   }
@@ -309,34 +318,42 @@ async function handleEmail() {
 
   showGeneric();
 
-  const domain = email.split('@')[1];
+  const isEmail = raw.includes('@');
+  const email = isEmail ? raw : null;
+  const domain = isEmail ? raw.split('@')[1] : null;
+  let company = isEmail ? null : raw;
+
   const personalDomains = ['gmail.com', 'outlook.com', 'hotmail.com', 'yahoo.com', 'icloud.com', 'live.com'];
   const coverSection = document.getElementById('cover-section');
   coverSection.style.display = 'block';
   setTimeout(() => coverSection.scrollIntoView({ behavior: 'smooth' }), 400);
 
-  if (personalDomains.includes(domain)) {
+  if (isEmail && personalDomains.includes(domain)) {
     document.getElementById('cover-title').textContent = 'A note for you';
     document.getElementById('cover-text').textContent = "Thanks for stopping by! I'm Ava — an AI developer passionate about building things that actually matter. If you're here out of curiosity, I hope you enjoy the read. If you'd like to connect, my email is always open.";
+    logView({ email, company: null, domain });
     return;
   }
 
-  let company = null;
-  try {
-    const lookupRes = await fetch('/api/lookup', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ domain })
-    });
-    if (lookupRes.ok) {
-      const data = await lookupRes.json();
-      company = data.company || null;
+  if (isEmail && domain) {
+    try {
+      const lookupRes = await fetch('/api/lookup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ domain })
+      });
+      if (lookupRes.ok) {
+        const data = await lookupRes.json();
+        company = data.company || null;
+      }
+    } catch (err) {
+      console.warn('Company lookup failed, continuing without a company name', err);
     }
-  } catch (err) {
-    console.warn('Company lookup failed, continuing without a company name', err);
   }
 
   document.getElementById('cover-title').textContent = `A note for the ${company ? company + ' team' : 'you'}`;
+
+  logView({ email, company, domain });
 
   try {
     const genRes = await fetch('/api/generate', {
